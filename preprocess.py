@@ -55,7 +55,7 @@ df.to_sql('TrackingDataTable',engine)
 engine.connect()
 engine.begin()
 '''
-with engine.connect() as conn:
-    result = conn.execute(text('PRAGMA table_info(TrackingDataTable)'))
-    for col in result:
-        print(col)
+# with engine.connect() as conn:
+#     result = conn.execute(text('PRAGMA table_info(TrackingDataTable)'))
+#     for col in result:
+#         print(col)
