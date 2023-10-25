@@ -56,28 +56,6 @@ class TrackingDataDataset(Dataset):
 
         if self.velocity:
             self.data = self.data[:,[0]+[4]+[5]+list(range(26,46))]
-        print(self.data.shape)
-        #===================TAKING TOO LONG
-        # for i in range(len(self.data)):
-        #     if i%10000 ==0:
-        #         print("Processed time step ",i)
-        #     curr_event_id = self.data[i][0] #get the current moment id
-        #     length = len(np.where(self.data[:,0]<=curr_event_id)) #how many snapshots have moment id smaller or equal to current moment id
-        #     cutoff_index = length - self.pred_len - self.seq_len
-        #     if i <= cutoff_index:
-        #         seq_start = i
-        #         seq_end = index + self.seq_len
-        #         target_start = seq_end - self.target_len
-        #         target_end = seq_end + self.pred_len
-        #         if i==0:
-        #             self.seq_x = self.data[seq_start:seq_end]
-        #             self.seq_y = self.data[target_start:target_end]
-        #         else:
-        #             self.seq_x = np.vstack(self.seq_x ,self.data[seq_start:seq_end])
-        #             self.seq_y = np.vstack(self.seq_y,self.data[target_start:target_end])
-        #     else:
-        #         continue
-        #===================TAKING TOO LONG
         self.data_x = self.data
         self.data_y = self.data
 
