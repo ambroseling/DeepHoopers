@@ -43,16 +43,17 @@ class TrackingDataDataset(Dataset):
         data split need to be split by games or by events, rn 
         '''
         #self.data = self.data[index]
+        mask = np.isnan(self.data ) | (self.data  == None)
+        self.data = self.data[~mask.any(axis=1)]
         if self.scale:
-            mask = np.isnan(self.data ) | (self.data  == None)
-            self.data = self.data[~mask.any(axis=1)]
-            self.data[:, [2] + [4] +list(range(6, 16)) + list(range(26, 36))] = self.data[:, [2] + [4] +list(range(6, 16)) + list(range(26, 36))] / 100.
-            self.data[:, [3] + [5] + list(range(16,26)) + list(range(36, 46))] = self.data[:,[3] + [5] + list(range(16,26)) + list(range(36, 46))] / 50.
+
+            self.data[:,[0]+ [2] + [4] +list(range(6, 16)) + list(range(26, 36))] = self.data[:, [0]+[2] + [4] +list(range(6, 16)) + list(range(26, 36))] / 100.
+            self.data[:,[0]+ [3] + [5] + list(range(16,26)) + list(range(36, 46))] = self.data[:,[0]+ [3] + [5] + list(range(16,26)) + list(range(36, 46))] / 50.
 
         if self.velocity:
             self.data = self.data[:,[0]+[4]+[5]+list(range(26,46))]
-        self.data_x = self.data
-        self.data_y = self.data
+        self.data_x = np.delete(self.data,0,axis=1)
+        self.data_y = np.delete(self.data,0,axis=1)
 
     #         [              seq_len           ]     
     #                          [  target_len   ][   pred_len   ]
@@ -65,8 +66,8 @@ class TrackingDataDataset(Dataset):
         seq_end = index + self.seq_len
         target_start = seq_end - self.target_len
         target_end = seq_end + self.pred_len
-        seq_x = self.data[seq_begin:seq_end]
-        seq_y = self.data[target_start:target_end]
+        seq_x = self.data_x[seq_begin:seq_end]
+        seq_y = self.data_y[target_start:target_end]
         return seq_x,seq_y
 
     def __len__(self):
