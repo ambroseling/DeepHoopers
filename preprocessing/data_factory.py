@@ -4,13 +4,15 @@ import pandas as pd
 import os
 import time
 import math
-
+import itertools
 import sqlalchemy
 from sqlalchemy import create_engine,text
 import numpy as np
 from torch.utils.data import Dataset,DataLoader,Subset
-engine = create_engine("sqlite+pysqlite:///deephoopers-mod.db",echo=True,future=True)
+
+#need to cd inot preprocessing to run main.py
 def query_data():
+    engine = create_engine("sqlite+pysqlite:///deephoopers-mod.db",echo=True,future=True)
     with engine.connect() as conn:
         data = conn.execute(text('SELECT Event_ID,Moment_Time,Ball_X,Ball_Y,Ball_DXDT,Ball_DYDT,Player_H_0_X,Player_H_1_X,Player_H_2_X,Player_H_3_X,Player_H_4_X,Player_V_0_X,Player_V_1_X,Player_V_2_X,Player_V_3_X,Player_V_4_X, Player_H_0_Y,Player_H_1_Y,Player_H_2_Y,Player_H_3_Y,Player_H_4_Y,Player_V_0_Y,Player_V_1_Y,Player_V_2_Y,Player_V_3_Y,Player_V_4_Y ,Player_H_0_DXDT,Player_H_1_DXDT,Player_H_2_DXDT,Player_H_3_DXDT,Player_H_4_DXDT,Player_V_0_DXDT,Player_V_1_DXDT,Player_V_2_DXDT,Player_V_3_DXDT,Player_V_4_DXDT, Player_H_0_DYDT,Player_H_1_DYDT,Player_H_2_DYDT,Player_H_3_DYDT,Player_H_4_DYDT,Player_V_0_DYDT,Player_V_1_DYDT,Player_V_2_DYDT,Player_V_3_DYDT,Player_V_4_DYDT FROM TrackingDataTable'))
         start = time.time()
@@ -20,10 +22,9 @@ def query_data():
         return t_data
 
 class TrackingDataDataset(Dataset):
-    def __init__(self,flag='train',size=None,scale=True,freq = 25,velocity=True,data =None):
+    def __init__(self,size=None,scale=True,freq = 25,velocity=True,data =None):
         self.dataset_len = len(data)
         self.data = data
-        self.flag=flag
         self.freq = freq
         self.scale = scale
         self.velocity = velocity
@@ -41,12 +42,6 @@ class TrackingDataDataset(Dataset):
         '''
         data split need to be split by games or by events, rn 
         '''
-        if self.flag == 'train':
-            index = list(range(0,int(self.dataset_len*0.6),int(25/self.freq)))
-        elif self.flag ==  'val':
-            index = list(range(int(self.dataset_len*0.6),int(self.dataset_len*0.8),int(25/self.freq)))
-        elif self.flag ==  'test':
-            index = list(range(int(self.dataset_len*0.8),self.dataset_len,int(25/self.freq)))
         #self.data = self.data[index]
         if self.scale:
             mask = np.isnan(self.data ) | (self.data  == None)
@@ -117,26 +112,32 @@ class TrackingDataDataset(Dataset):
 
 
 #THIS CODE IS JUST FOR TESTING OUT THE DATASET AND DATALOADER, SO FAR IT WORKS:)
-def data_provider(args,flag,data):
-    dataset = TrackingDataDataset(flag,None,True,25,True,data)
-    indices = dataset.get_window_indices()
-    train_index,val_test_index,train_indices = indices[0:int(len(indices)*0.6)]
+def data_provider(size = (10,7,3),scale=True,velocity=True,freq = 25 ):
+    data = query_data()
+    dataset = TrackingDataDataset(size,scale,freq,velocity,data)
+    train_index,val_test_index,indices = dataset.get_window_indices()
+    #indices = indices[0:int(len(indices)*0.6)]
     
-    train_indices = indices[0:indices.index(train_index)]
-    val_indices = indices[indices.index(train_index):indices.index(val_test_index)]
-    test_indices = indices[indices.index(val_test_index):len(indices)]
-    if args.flag == 'train':
-        dataset = Subset(dataset,train_indices)
-    elif args.flag == 'val':
-        dataset = Subset(dataset,val_indices)
-    else:
-        dataset = Subset(dataset,test_indices)
-    dataloader = DataLoader(dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = False)
-    return dataset,dataloader
+    train_indices = indices[0:indices.index(train_index-1)]
+    val_indices = indices[indices.index(train_index-1):indices.index(val_test_index-1)]
+    test_indices = indices[indices.index(val_test_index-1):len(indices)]
+    train_dataset = Subset(dataset,train_indices)
+    val_dataset = Subset(dataset,val_indices)
+    test_dataset = Subset(dataset,test_indices)
 
-data = query_data()
-dataset,dataloader = data_provider(None, 'train', data)
-print(dataset)
-for batch_x,batch_y in dataloader:
-    print(batch_x.shape,batch_y.shape)
-    break
+    train_dataloader = DataLoader(train_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
+    #train_dataloader = iter(itertools.islice(train_dataloader, 0, len(train_dataloader) - 3))
+    # print(next(iter(train_dataloader))[0].shape)
+    val_dataloader = DataLoader(val_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
+    test_dataloader = DataLoader(test_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
+
+    return train_dataloader,val_dataloader,test_dataloader
+
+# data = query_data()
+# dataset,dataloader = data_provider(None, 'train', data)
+# print(dataset)
+# for batch_x,batch_y in dataloader:
+#     print(batch_x.shape,batch_y.shape)
+#     break
+# if __name__ == '__main__':
+#     data_provider()
