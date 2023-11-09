@@ -45,15 +45,19 @@ class TrackingDataDataset(Dataset):
         #self.data = self.data[index]
         mask = np.isnan(self.data ) | (self.data  == None)
         self.data = self.data[~mask.any(axis=1)]
+        self.data = self.data[::int((25/self.freq))]
         if self.scale:
 
-            self.data[:,[0]+ [2] + [4] +list(range(6, 16)) + list(range(26, 36))] = self.data[:, [0]+[2] + [4] +list(range(6, 16)) + list(range(26, 36))] / 100.
-            self.data[:,[0]+ [3] + [5] + list(range(16,26)) + list(range(36, 46))] = self.data[:,[0]+ [3] + [5] + list(range(16,26)) + list(range(36, 46))] / 50.
+            self.data[:, [2] + [4] +list(range(6, 16)) + list(range(26, 36))] = self.data[:, [2] + [4] +list(range(6, 16)) + list(range(26, 36))] / 100.
+            self.data[:, [3] + [5] + list(range(16,26)) + list(range(36, 46))] = self.data[:, [3] + [5] + list(range(16,26)) + list(range(36, 46))] / 50.
 
         if self.velocity:
-            self.data = self.data[:,[0]+[4]+[5]+list(range(26,46))]
+            self.data = self.data[:,[0]+[4]+[5]+list(range(26,46))]*1000 #convert back to 
+        else:
+            self.data = self.data[:,[0]+[2]+[3]+list(range(6, 16))+ list(range(16,26)) ]
         self.data_x = np.delete(self.data,0,axis=1)
         self.data_y = np.delete(self.data,0,axis=1)
+
 
     #         [              seq_len           ]     
     #                          [  target_len   ][   pred_len   ]
@@ -84,9 +88,11 @@ class TrackingDataDataset(Dataset):
             if self.data[i,0] != self.data[i+self.pred_len+self.seq_len-1,0]: #if you are transitioning from one event to another
                 if not train_index_found and i >= int((len(self.data)-self.pred_len-self.seq_len)*0.6):
                     train_index = i
+                    indices.append(i)
                     train_index_found = True
                 elif not val_test_index_found and i >= int((len(self.data)-self.pred_len-self.seq_len)*0.8):
                     val_test_index_found = True
+                    indices.append(i)
                     val_test_index = i
                 continue
             else:
@@ -119,9 +125,9 @@ def data_provider(size = (10,7,3),scale=True,velocity=True,freq = 25 ):
     train_index,val_test_index,indices = dataset.get_window_indices()
     #indices = indices[0:int(len(indices)*0.6)]
     
-    train_indices = indices[0:indices.index(train_index-1)]
-    val_indices = indices[indices.index(train_index-1):indices.index(val_test_index-1)]
-    test_indices = indices[indices.index(val_test_index-1):len(indices)]
+    train_indices = indices[0:indices.index(train_index)]
+    val_indices = indices[indices.index(train_index):indices.index(val_test_index)]
+    test_indices = indices[indices.index(val_test_index):len(indices)]
     train_dataset = Subset(dataset,train_indices)
     val_dataset = Subset(dataset,val_indices)
     test_dataset = Subset(dataset,test_indices)
