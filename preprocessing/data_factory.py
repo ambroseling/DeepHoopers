@@ -51,12 +51,8 @@ class TrackingDataDataset(Dataset):
             self.data[:, [2] + [4] +list(range(6, 16)) + list(range(26, 36))] = self.data[:, [2] + [4] +list(range(6, 16)) + list(range(26, 36))] / 100.
             self.data[:, [3] + [5] + list(range(16,26)) + list(range(36, 46))] = self.data[:, [3] + [5] + list(range(16,26)) + list(range(36, 46))] / 50.
 
-        if self.velocity:
-            self.data = self.data[:,[0]+[4]+[5]+list(range(26,46))]*1000 #convert back to 
-        else:
-            self.data = self.data[:,[0]+[2]+[3]+list(range(6, 16))+ list(range(16,26)) ]
-        self.data_x = np.delete(self.data,0,axis=1)
-        self.data_y = np.delete(self.data,0,axis=1)
+        self.data_x = self.data[:,[4]+[5]+list(range(26,46))]*1000 if self.velocity else self.data[:,[2]+[3]+list(range(6, 26))]
+        self.data_y = self.data[:,[4]+[5]+list(range(26,46))]*1000 if self.velocity else self.data[:,[2]+[3]+list(range(6, 26))]
 
 
     #         [              seq_len           ]     
@@ -77,27 +73,39 @@ class TrackingDataDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
-    def get_window_indices(self):
-        indices = []
-        index = 0
-        train_index = 0
-        train_index_found = False
-        val_test_index = 0
-        val_test_index_found = False
-        for i in range(len(self.data)-self.pred_len-self.seq_len):
-            if self.data[i,0] != self.data[i+self.pred_len+self.seq_len-1,0]: #if you are transitioning from one event to another
-                if not train_index_found and i >= int((len(self.data)-self.pred_len-self.seq_len)*0.6):
-                    train_index = i
-                    indices.append(i)
-                    train_index_found = True
-                elif not val_test_index_found and i >= int((len(self.data)-self.pred_len-self.seq_len)*0.8):
-                    val_test_index_found = True
-                    indices.append(i)
-                    val_test_index = i
-                continue
-            else:
-                indices.append(i)
-        return train_index,val_test_index,indices
+    # def get_window_indices(self):
+    #     indices = []
+    #     index = 0
+    #     train_index = 0
+    #     train_index_found = False
+    #     val_test_index = 0
+    #     val_test_index_found = False
+    #     print(self.data.shape[-1])
+    #     for i in range(len(self.data)-self.pred_len-self.seq_len):
+    #         if self.data[i,0] != self.data[i+self.pred_len+self.seq_len-1,0]: #if you are transitioning from one event to another
+    #             if not train_index_found and i >= int((len(self.data)-self.pred_len-self.seq_len)*0.6):
+    #                 train_index = i
+    #                 indices.append(i)
+    #                 train_index_found = True
+    #             elif not val_test_index_found and i >= int((len(self.data)-self.pred_len-self.seq_len)*0.8):
+    #                 val_test_index_found = True
+    #                 indices.append(i)
+    #                 val_test_index = i
+    #             continue
+    #         else:
+    #             indices.append(i)
+    #     return train_index,val_test_index,indices
+        
+    def get_test_game(self,val_test_index):
+        min_event_id = self.data[val_test_index,0]
+        max_event_id = self.data[-1,0]
+        print("Min event id: ",min_event_id)
+        print("Max event id: ",max_event_id)
+        random_event = np.random.randint(min_event_id,max_event_id)
+        mask = self.data[:,0] == random_event
+        test_data = self.data[mask]
+        return test_data
+
 
 
 # def data_provider(args,data):
@@ -122,12 +130,14 @@ class TrackingDataDataset(Dataset):
 def data_provider(size = (10,7,3),scale=True,velocity=True,freq = 25 ):
     data = query_data()
     dataset = TrackingDataDataset(size,scale,freq,velocity,data)
-    train_index,val_test_index,indices = dataset.get_window_indices()
-    #indices = indices[0:int(len(indices)*0.6)]
-    
-    train_indices = indices[0:indices.index(train_index)]
-    val_indices = indices[indices.index(train_index):indices.index(val_test_index)]
-    test_indices = indices[indices.index(val_test_index):len(indices)]
+    # train_index,val_test_index,indices = dataset.get_window_indices()
+    # #indices = indices[0:int(len(indices)*0.6)]
+    train_index = int(len(dataset)*0.6)
+    val_test_index = int(len(dataset)*0.8)
+    train_indices = list(range(0,train_index))
+    val_indices = list(range(train_index,val_test_index))
+    test_indices = list(range(val_test_index,len(dataset)-1))
+
     train_dataset = Subset(dataset,train_indices)
     val_dataset = Subset(dataset,val_indices)
     test_dataset = Subset(dataset,test_indices)
@@ -137,8 +147,12 @@ def data_provider(size = (10,7,3),scale=True,velocity=True,freq = 25 ):
     # print(next(iter(train_dataloader))[0].shape)
     val_dataloader = DataLoader(val_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
     test_dataloader = DataLoader(test_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
+    test_data = dataset.get_test_game(val_test_index)
+    print(len(train_dataloader))
+    print(len(val_dataloader))
+    print(len(test_dataloader))
 
-    return train_dataloader,val_dataloader,test_dataloader
+    return train_dataloader,val_dataloader,test_dataloader,test_data
 
 # data = query_data()
 # dataset,dataloader = data_provider(None, 'train', data)

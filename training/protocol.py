@@ -8,9 +8,11 @@ from models.baseline import MLP
 import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 
 class Protocol():
-    def __init__(self,model,epoch,learning_rate,batch_size,num_features,seq_len,pred_len,target_len,scale,velocity,freq):
+    def __init__(self,model,epoch,learning_rate,batch_size,num_features,seq_len,pred_len,target_len,scale,velocity,freq,device):
         super(Protocol,self).__init__()
         #model
         self.model = model
@@ -25,7 +27,7 @@ class Protocol():
             self.model_name = 'MLP'
 
         self.model_size = 0
-        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        self.device = device
         #hyper param
         self.epoch = epoch
         self.learning_rate = learning_rate
@@ -42,6 +44,7 @@ class Protocol():
         self.train_loader = None
         self.val_loader = None
         self.test_loader = None
+        self.test_data = None
 
         #training metrics
         self.training_loss = []
@@ -50,7 +53,7 @@ class Protocol():
         self.avg_val_loss = 0.0
         self.avg_test_loss = 0.0
 
-        self.best_val_loss = 0.0
+        self.best_val_loss = 100
         self.best_epoch = 0
         self.best_path = ""
 
@@ -63,8 +66,10 @@ class Protocol():
         self.loss_fn = nn.MSELoss()
         self.optimizer = torch.optim.Adam(self.model.parameters(),lr=self.learning_rate)
 
+        self.court_path = "/Users/ambroseling/Desktop/DeepHoopers/DeepHoopers/assets/nba_court_T.png"
+
     def load_data(self):
-        self.train_loader,self.val_loader,self.test_loader = data_provider(size = (self.seq_len,self.target_len,self.pred_len),scale=self.scale,velocity=self.velocity,freq = self.freq)
+        self.train_loader,self.val_loader,self.test_loader,self.test_data = data_provider(size = (self.seq_len,self.target_len,self.pred_len),scale=self.scale,velocity=self.velocity,freq = self.freq)
         print("\n")
         print("###############DATA LOADING SUCCESS###############")
         print("Data paremters: ")
@@ -171,3 +176,86 @@ class Protocol():
         plt.ylabel("Loss")
         plt.legend(loc='best')
         plt.savefig(f"../training_curves/{self.model_name}_bs{self.batch_size}_lr{self.learning_rate}_win{self.seq_len}-{self.target_len}-{self.pred_len}_v{self.velocity}_sc{self.scale}.png")
+
+    def generate_predictions(self,model):
+        pred_data = self.test_data[0:self.seq_len]
+        pred_data = torch.unsqueeze(torch.tensor(pred_data),dim=0)
+        predictions = []
+        for _ in range(len(self.test_data) - self.seq_len):
+            input_tensor = torch.tensor(pred_data[-self.seq_len:], dtype=torch.float32).unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                output = self.model(input_tensor)
+
+            last_output = output[0, -self.pred_len:].cpu().numpy()
+            predictions.append(last_output)
+            pred_data = np.vstack([pred_data, last_output])
+        predictions = np.vstack(predictions)
+        return predictions
+
+    def plot_test_data(self):
+        #model = model.load_state_dict(torch.load(ckpt_path))
+        pred_data = self.generate_predictions(self.model)
+        print("Legnth of test data: ",len(self.test_data))
+        fig = plt.figure()
+        ax = plt.gca()
+        img = mpimg.imread(self.court_path)  # read image. I got this image from gmf05's github.
+        plt.imshow(img, extent=[0,94,0,50], zorder=0)  # show the image.
+        plt.xlim([0,94])
+        plt.ylim([0,50])
+        plt.tight_layout(pad=0, w_pad=0.5, h_pad=0)
+        ball_x = self.test_data[:,2] #4,5 ball x,y 6-
+        ball_y = self.test_data[:,3]
+
+        pred_ball_x = self.pred_data[:,2] #4,5 ball x,y 6-
+        pred_ball_y = self.pred_data[:,3]
+
+        home_color = '#E13A3E'
+        away_color = '#008348'
+
+        pred_home_color = '#F09C9E'
+        pred_away_color = '#7FC1A3'
+
+        if self.scale:
+            rescale_x = 50.0
+            rescale_y = 100.0
+        else:
+            rescale_x = 1.0
+            rescale_y = 1.0   
+        player_x = self.test_data[:,list(range(6,11))+list(range(11,16))]*rescale_x
+        player_y = self.test_data[:,list(range(16,21))+list(range(21,26))]*rescale_y
+
+        pred_player_x = self.pred_data[:,list(range(6,11))+list(range(11,16))]*rescale_x
+        pred_player_y = self.pred_data[:,list(range(16,21))+list(range(21,26))]*rescale_y
+
+        for t in range(int(len(self.test_data)*0.1)):
+            pred_ball_circ = plt.Circle((pred_ball_x[t], pred_ball_y[t]), 0, color=[1, 0.4, 0])  # create circle object for bal
+            ball_circ = plt.Circle((ball_x[t], ball_y[t]), 0, color=[1, 0.4, 0])  # create circle object for bal
+            ax.add_artist(pred_ball_circ)
+            ax.add_artist(ball_circ)
+            l = [0,6] #[0,1,2,3,4,5,6,7,8,9]
+            for a in l:
+                if a<5: #home x & y
+                    color = home_color
+                    pred_color = pred_home_color
+                else:
+                    color = away_color
+                    pred_color = pred_away_color
+
+                p_x = player_x[t,a]
+                p_y =player_y[t,a]
+                pred_p_x = pred_player_x[t,a]
+                pred_p_y =pred_player_y[t,a]
+                player_circ = plt.Circle((p_x,p_y), 0.3,
+                    facecolor=color,edgecolor='k')
+                pred_player_circ = plt.Circle((pred_p_x,pred_p_y), 0.3,
+                    facecolor=color,edgecolor='k')
+                ax.add_artist(player_circ)
+                ax.add_artist(pred_player_circ)
+        plt.show()
+
+
+
+
+
+
+

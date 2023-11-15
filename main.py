@@ -16,10 +16,10 @@ def main():
     batch_size = 32
     num_features = 22
     seq_len = 50 
-    target_len = 30
-    pred_len = 20
+    target_len = 25
+    pred_len = 25
     scale = True
-    velocity = True
+    velocity = False
     freq = 5
 
     input_size = 22
@@ -28,11 +28,11 @@ def main():
     output_size = 22
     fc_units_bi = [128,64,22]
     fc_units = [64,32,22]
-
-    lstm = LSTM(input_size, hidden_size, fc_units, output_size, num_layers)
-    bilstm = BiLSTM(input_size, hidden_size, fc_units_bi, output_size, num_layers)
-    grued = GRUEncoderDecoder(num_layers, input_size, hidden_size, fc_units, output_size)
-    mlp = MLP(num_features)
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    lstm = LSTM(input_size, hidden_size, fc_units, output_size, num_layers,device)
+    bilstm = BiLSTM(input_size, hidden_size, fc_units_bi, output_size, num_layers,device)
+    grued = GRUEncoderDecoder(num_layers, input_size, hidden_size, fc_units, output_size,device)
+    mlp = MLP(num_features,device)
     
 
     # lstm_protocol = Protocol(lstm, epoch, learning_rate, batch_size, num_features, seq_len, pred_len, target_len, scale, velocity, freq)
@@ -45,15 +45,17 @@ def main():
     # bilstm_protocol.train()
     # bilstm_protocol.eval()
     
-    grued_protocol = Protocol(grued, epoch, learning_rate, batch_size, num_features, seq_len, pred_len, target_len, scale, velocity, freq)
-    grued_protocol.load_data()
-    grued_protocol.train()
-    grued_protocol.eval()
+    # grued_protocol = Protocol(grued, epoch, learning_rate, batch_size, num_features, seq_len, pred_len, target_len, scale, velocity, freq)
+    # grued_protocol.load_data()
+    # grued_protocol.plot_test_data()
 
-    # mlp_protocol = Protocol(mlp, epoch, learning_rate, batch_size, num_features, seq_len, pred_len, target_len, scale, velocity, freq)
-    # mlp_protocol.load_data()
+    # grued_protocol.train()
+    # grued_protocol.eval()
+
+    mlp_protocol = Protocol(mlp, epoch, learning_rate, batch_size, num_features, seq_len, pred_len, target_len, scale, velocity, freq,device)
+    mlp_protocol.load_data()
     # mlp_protocol.train()
-    # mlp_protocol.eval()
+    mlp_protocol.eval()
 
     return
 

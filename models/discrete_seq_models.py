@@ -5,18 +5,18 @@ import math
 import torch.autograd as Variable
 
 class LSTM(nn.Module):
-    def __init__(self,input_size,hidden_size,fc_units,output_size,num_layers):
+    def __init__(self,input_size,hidden_size,fc_units,output_size,num_layers,device):
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size,hidden_size,num_layers,batch_first =True,device="mps") 
-        self.linear = [nn.Linear(fc_units[i],fc_units[i+1],bias=True,device="mps") for i in range(len(fc_units)-1) ]
+        self.lstm = nn.LSTM(input_size,hidden_size,num_layers,batch_first =True,device=device) 
+        self.linear = [nn.Linear(fc_units[i],fc_units[i+1],bias=True,device=device) for i in range(len(fc_units)-1) ]
         self.relu = nn.ReLU()
     def forward(self,x):
         '''
         '''
-        h0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to("mps")
-        c0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to("mps")
+        h0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to(device)
+        c0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to(device)
         x,(h0,c0) = self.lstm(x,(h0,c0))
         for i,l in enumerate(self.linear):
             if i==0:
@@ -29,18 +29,19 @@ class LSTM(nn.Module):
 
 
 class BiLSTM(nn.Module):
-    def __init__(self,input_size,hidden_size,fc_units,output_size,num_layers):
+    def __init__(self,input_size,hidden_size,fc_units,output_size,num_layers,device):
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
-        self.bilstm = nn.LSTM(input_size,hidden_size,num_layers,batch_first =True,bidirectional=True,device="mps")
-        self.linear = [nn.Linear(fc_units[i],fc_units[i+1],bias=True,device="mps") for i in range(len(fc_units)-1) ]
+        self.device = device
+        self.bilstm = nn.LSTM(input_size,hidden_size,num_layers,batch_first =True,bidirectional=True,device=device)
+        self.linear = [nn.Linear(fc_units[i],fc_units[i+1],bias=True,device=device) for i in range(len(fc_units)-1) ]
         self.relu = nn.ReLU()
     def forward(self,x):
         '''
         '''
-        h0 = torch.zeros(2*self.num_layers,x.size(0),self.hidden_size).to("mps")
-        c0 = torch.zeros(2*self.num_layers,x.size(0),self.hidden_size).to("mps")
+        h0 = torch.zeros(2*self.num_layers,x.size(0),self.hidden_size).to(self.device)
+        c0 = torch.zeros(2*self.num_layers,x.size(0),self.hidden_size).to(self.devce)
         x,(h0,c0) = self.bilstm(x,(h0,c0))
         for i,l in enumerate(self.linear):
             if i==0:
@@ -51,32 +52,34 @@ class BiLSTM(nn.Module):
 
 
 class GRUEncoder(nn.Module):
-    def __init__(self,num_layers,hidden_size,input_size):
+    def __init__(self,num_layers,hidden_size,input_size,device):
         '''
         '''
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
         self.input_size = input_size
-        self.gru = nn.GRU(input_size,hidden_size,num_layers,batch_first = True,device="mps")
+        self.gru = nn.GRU(input_size,hidden_size,num_layers,batch_first = True,device=device)
+        self.device = device
     def forward(self,x):
         '''
         '''
-        h0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to("mps")
+        h0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to(self.device)
         out,hn = self.gru(x,h0)
         return out,hn
 
 
 class GRUDecoder(nn.Module):
-    def __init__(self,num_layers,hidden_size,fc_units,input_size,output_size):
+    def __init__(self,num_layers,hidden_size,fc_units,input_size,output_size,device):
         '''
         '''
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
-        self.gru = nn.GRU(hidden_size,hidden_size,num_layers,batch_first = True,device="mps")
-        self.linear = [nn.Linear(fc_units[i],fc_units[i+1],device="mps") for i in range(len(fc_units)-1)]
+        self.gru = nn.GRU(hidden_size,hidden_size,num_layers,batch_first = True,device=device)
+        self.linear = [nn.Linear(fc_units[i],fc_units[i+1],device=device) for i in range(len(fc_units)-1)]
         self.relu = nn.ReLU()
+        self.device = device
     def forward(self,x,hn):
         ''' 
         '''
@@ -91,12 +94,12 @@ class GRUDecoder(nn.Module):
         
 
 class GRUEncoderDecoder(nn.Module):
-    def __init__(self,num_layers,input_size,hidden_size,fc_units,output_size):
+    def __init__(self,num_layers,input_size,hidden_size,fc_units,output_size,device):
         ''' 
         '''
         super().__init__()
-        self.encoder = GRUEncoder(num_layers, hidden_size, input_size)
-        self.decoder = GRUDecoder(num_layers, hidden_size, fc_units, input_size,output_size)
+        self.encoder = GRUEncoder(num_layers, hidden_size, input_size,device)
+        self.decoder = GRUDecoder(num_layers, hidden_size, fc_units, input_size,output_size,device)
         
     def forward(self,x):
         encoder_output,hn = self.encoder(x)
