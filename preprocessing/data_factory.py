@@ -8,8 +8,12 @@ import itertools
 import sqlalchemy
 from sqlalchemy import create_engine,text
 import numpy as np
+import tqdm
 from torch.utils.data import Dataset,DataLoader,Subset
-
+import torch_geometric
+from torch_geometric.data import Data,Batch
+import torch
+from models.spatial_models import GATLSTM
 #need to cd inot preprocessing to run main.py
 def query_data():
     engine = create_engine("sqlite+pysqlite:///deephoopers-mod.db",echo=True,future=True)
@@ -22,13 +26,16 @@ def query_data():
         return t_data
 
 class TrackingDataDataset(Dataset):
-    def __init__(self,size=None,scale=True,freq = 25,velocity=True,data =None):
+    def __init__(self,size=None,scale=True,freq = 25,velocity=True,graph=False,data =None):
         self.dataset_len = len(data)
         self.data = data
         self.freq = freq
         self.scale = scale
         self.velocity = velocity
+        self.graph = graph
         self.windowed = None
+        self.graph_data = None
+        self.edge_index_list = None
         if size == None:
             self.seq_len = 10
             self.target_len = 10
@@ -38,6 +45,20 @@ class TrackingDataDataset(Dataset):
             self.target_len = size[1]
             self.pred_len = size[2]
         self.__read_data__()
+
+    def construct_edges(self,row):
+        edge_index = [[],[]]
+        for i in range(len(row)):
+            for j in range(len(row)):
+                if i == j:
+                    continue
+                else:
+                    if math.sqrt(((row[j][0]-row[i][0])*100.0)**2 + ((row[j][1]-row[i][1])*50.0)**2)<5.0:
+                        edge_index[0].append(i)
+                        edge_index[1].append(j)
+        return edge_index
+
+
     def __read_data__(self):
         '''
         data split need to be split by games or by events, rn 
@@ -53,6 +74,19 @@ class TrackingDataDataset(Dataset):
 
         self.data_x = self.data[:,[4]+[5]+list(range(26,46))]*1000 if self.velocity else self.data[:,[2]+[3]+list(range(6, 26))]
         self.data_y = self.data[:,[4]+[5]+list(range(26,46))]*1000 if self.velocity else self.data[:,[2]+[3]+list(range(6, 26))]
+        x_coord = self.data_x[:,[0]+list(range(2,12))]
+        y_coord = self.data_y[:,[1]+list(range(12,22))]
+        self.graph_data = np.stack((x_coord,y_coord),axis=-1)
+
+        edge_index = []
+        for i in range(len(self.graph_data)):
+            e_i = self.construct_edges(self.graph_data[i])
+            edge_index.append(e_i)
+        self.edge_index_list = edge_index
+        print("Transformed data shape: ",self.graph_data.shape)
+        print("Edge_index: ",len(edge_index[0]))
+
+
 
 
     #         [              seq_len           ]     
@@ -61,15 +95,25 @@ class TrackingDataDataset(Dataset):
     #         |                |                |               |
     #        seq_start     target_start      seq_end        target_end
      
+     #Regular getter
     def __getitem__(self,index):
         seq_begin = index
         seq_end = index + self.seq_len
         target_start = seq_end - self.target_len
         target_end = seq_end + self.pred_len
-        seq_x = self.data_x[seq_begin:seq_end]
-        seq_y = self.data_y[target_start:target_end]
+        if self.graph:
+            graph_data_list = []
+            for i in range(seq_begin,seq_end):
+                d = Data(x = torch.tensor(self.graph_data[i]),edge_index=torch.tensor(self.edge_index_list[i]),y=torch.tensor(self.data_y[i-seq_begin+target_start]))
+                #print(type(d))
+                graph_data_list.append(d)
+            batch = Batch.from_data_list(graph_data_list)
+            return batch
+        else:
+            seq_x = self.data_x[seq_begin:seq_end]
+            seq_y = self.data_y[target_start:target_end]
         return seq_x,seq_y
-
+    
     def __len__(self):
         return len(self.data)
 
@@ -107,58 +151,39 @@ class TrackingDataDataset(Dataset):
         return test_data
 
 
-
-# def data_provider(args,data):
-#     dataset = TrackingDataDataset(args.flag,args.size,args.scale,args.freq,args.velocity,data)
-    # indices = dataset.get_window_indices()
-    #train_index,val_test_index,train_indices = indices[0:int(len(indices)*0.6)]
-
-    # train_indices = indices[0:indices.index(train_index)]
-    # val_indices = indices[indices.index(train_index):indices.index(val_test_index)]
-    # test_indices = indices[indices.index(val_test_index):len(indices)]
-    # if args.flag == 'train':
-    #     dataset = Subset(dataset,train_indices)
-    # elif args.flag == 'val':
-    #     dataset = Subset(dataset,val_indices)
-    # else:
-    #     dataset = Subset(dataset,test_indices)
-#     dataloader = DataLoader(dataset,batch_size = args.batch_size,shuffle=None,num_workers=args.num_workers,drop_last = False)
-#     return dataset,dataloader
-
-
 #THIS CODE IS JUST FOR TESTING OUT THE DATASET AND DATALOADER, SO FAR IT WORKS:)
-def data_provider(size = (10,7,3),scale=True,velocity=True,freq = 25 ):
+def data_provider(size = (10,7,3),scale=True,velocity=True,freq = 25 ,graph=False):
     data = query_data()
-    dataset = TrackingDataDataset(size,scale,freq,velocity,data)
+    dataset = TrackingDataDataset(size,scale,freq,velocity,graph,data)
     # train_index,val_test_index,indices = dataset.get_window_indices()
     # #indices = indices[0:int(len(indices)*0.6)]
     train_index = int(len(dataset)*0.6)
     val_test_index = int(len(dataset)*0.8)
     train_indices = list(range(0,train_index))
     val_indices = list(range(train_index,val_test_index))
-    test_indices = list(range(val_test_index,len(dataset)-1))
+    test_indices = list(range(val_test_index,len(dataset)-size[0]-size[2]+1))
 
     train_dataset = Subset(dataset,train_indices)
     val_dataset = Subset(dataset,val_indices)
     test_dataset = Subset(dataset,test_indices)
 
-    train_dataloader = DataLoader(train_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
-    #train_dataloader = iter(itertools.islice(train_dataloader, 0, len(train_dataloader) - 3))
-    # print(next(iter(train_dataloader))[0].shape)
-    val_dataloader = DataLoader(val_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
-    test_dataloader = DataLoader(test_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
+    if graph:
+        train_dataloader = torch_geometric.loader.DataLoader(train_dataset,batch_size=32,shuffle=False,drop_last=True)
+        val_dataloader = torch_geometric.loader.DataLoader(val_dataset,batch_size=32,shuffle=False,drop_last=True)
+        test_dataloader = torch_geometric.loader.DataLoader(test_dataset,batch_size=32,shuffle=False,drop_last=True)
+    else:
+        train_dataloader = DataLoader(train_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
+        val_dataloader = DataLoader(val_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
+        test_dataloader = DataLoader(test_dataset,batch_size = 32,shuffle=None,num_workers=0,drop_last = True)
     test_data = dataset.get_test_game(val_test_index)
-    print(len(train_dataloader))
-    print(len(val_dataloader))
-    print(len(test_dataloader))
+
+    # What our data loaders for the graph model look like: 
+    # 1 batch has 32 of these --> DataBatch(x=[550, 2], edge_index=[2, 286], y=[1100], batch=[550], ptr=[51])
+    #                             This DataBatch object has 50 graphs stacked together
+    #                             batch is a vector indicating which node belongs to which graph
+    #                             ptr tells us the cummulative number of nodes in the batch up to each graph
+    # Each sample is a DataBatch
+
 
     return train_dataloader,val_dataloader,test_dataloader,test_data
 
-# data = query_data()
-# dataset,dataloader = data_provider(None, 'train', data)
-# print(dataset)
-# for batch_x,batch_y in dataloader:
-#     print(batch_x.shape,batch_y.shape)
-#     break
-# if __name__ == '__main__':
-#     data_provider()
