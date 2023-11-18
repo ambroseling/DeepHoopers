@@ -13,7 +13,7 @@ from torch.utils.data import Dataset,DataLoader,Subset
 import torch_geometric
 from torch_geometric.data import Data,Batch
 import torch
-from models.spatial_models import GATLSTM
+
 #need to cd inot preprocessing to run main.py
 def query_data():
     engine = create_engine("sqlite+pysqlite:///deephoopers-mod.db",echo=True,future=True)
@@ -184,6 +184,6 @@ def data_provider(size = (10,7,3),scale=True,velocity=True,freq = 25 ,graph=Fals
     #                             ptr tells us the cummulative number of nodes in the batch up to each graph
     # Each sample is a DataBatch
 
-    
+
     return train_dataloader,val_dataloader,test_dataloader,test_data
 
