@@ -184,6 +184,6 @@ def data_provider(size = (10,7,3),scale=True,velocity=True,freq = 25 ,graph=Fals
     #                             ptr tells us the cummulative number of nodes in the batch up to each graph
     # Each sample is a DataBatch
 
-
+    
     return train_dataloader,val_dataloader,test_dataloader,test_data
 
