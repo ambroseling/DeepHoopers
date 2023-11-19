@@ -9,14 +9,15 @@ class LSTM(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
+        self.device = device
         self.lstm = nn.LSTM(input_size,hidden_size,num_layers,batch_first =True,device=device) 
         self.linear = [nn.Linear(fc_units[i],fc_units[i+1],bias=True,device=device) for i in range(len(fc_units)-1) ]
         self.relu = nn.ReLU()
     def forward(self,x):
         '''
         '''
-        h0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to(device)
-        c0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to(device)
+        h0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to(self.device)
+        c0 = torch.zeros(self.num_layers,x.size(0),self.hidden_size).to(self.device)
         x,(h0,c0) = self.lstm(x,(h0,c0))
         for i,l in enumerate(self.linear):
             if i==0:
@@ -41,7 +42,7 @@ class BiLSTM(nn.Module):
         '''
         '''
         h0 = torch.zeros(2*self.num_layers,x.size(0),self.hidden_size).to(self.device)
-        c0 = torch.zeros(2*self.num_layers,x.size(0),self.hidden_size).to(self.devce)
+        c0 = torch.zeros(2*self.num_layers,x.size(0),self.hidden_size).to(self.device)
         x,(h0,c0) = self.bilstm(x,(h0,c0))
         for i,l in enumerate(self.linear):
             if i==0:

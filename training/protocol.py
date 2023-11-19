@@ -4,6 +4,7 @@ import torch.nn as nn
 import math
 from preprocessing.data_factory import data_provider
 from models.discrete_seq_models import GRUEncoderDecoder, LSTM, BiLSTM
+from models.spatial_models import GNNLSTM, GNNBiLSTM,GNNGRUED
 from models.baseline import MLP
 import time
 from tqdm import tqdm
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
 class Protocol():
-    def __init__(self,model,epoch,learning_rate,batch_size,num_features,seq_len,pred_len,target_len,scale,velocity,freq,device):
+    def __init__(self,model,epoch,learning_rate,batch_size,num_features,seq_len,pred_len,target_len,scale,velocity,freq,graph,device):
         super(Protocol,self).__init__()
         #model
         self.model = model
@@ -25,6 +26,12 @@ class Protocol():
             self.model_name = 'BiLSTM'
         elif isinstance(model,MLP):
             self.model_name = 'MLP'
+        elif isinstance(model, GNNLSTM):
+            self.model_name = "GNNLSTM"
+        elif isinstance(model, GNNBiLSTM):
+            self.model_name = "GNNBiLSTM"
+        elif isinstance(model, GNNGRUED):
+            self.model_name = "GNNGRUED"
 
         self.model_size = 0
         self.device = device
@@ -40,6 +47,7 @@ class Protocol():
         self.scale = scale
         self.velocity = velocity
         self.freq = freq
+        self.graph = graph
         #loaders
         self.train_loader = None
         self.val_loader = None
@@ -69,7 +77,7 @@ class Protocol():
         self.court_path = "/Users/ambroseling/Desktop/DeepHoopers/DeepHoopers/assets/nba_court_T.png"
 
     def load_data(self):
-        self.train_loader,self.val_loader,self.test_loader,self.test_data = data_provider(size = (self.seq_len,self.target_len,self.pred_len),scale=self.scale,velocity=self.velocity,freq = self.freq)
+        self.train_loader,self.val_loader,self.test_loader,self.test_data = data_provider(size = (self.seq_len,self.target_len,self.pred_len),scale=self.scale,velocity=self.velocity,graph=self.graph,freq = self.freq)
         print("\n")
         print("###############DATA LOADING SUCCESS###############")
         print("Data paremters: ")
@@ -86,43 +94,80 @@ class Protocol():
         self.model.train()
         self.model = self.model.to(self.device)
         train_start = time.time()
-        
-        for epoch in range(self.epoch):
-            epoch_start = time.time()
-            self.avg_train_loss = 0.0
-            self.avg_val_loss = 0.0
-            for batch_x,batch_y in tqdm(self.train_loader):
-                batch_x, batch_y = batch_x.float().to(self.device), batch_y.float().to(self.device)
-                inf_start = time.time()
-                output = self.model(batch_x)
-                inf_end = time.time()
-                self.avg_inference_time += inf_end-inf_start
-                loss = self.loss_fn(output,batch_y)
-                self.avg_train_loss +=loss.item()
-                loss.backward()
-                self.optimizer.step()
-                self.optimizer.zero_grad()
-            self.avg_train_loss /= len(self.train_loader)
-            self.training_loss.append(self.avg_train_loss )
-            self.avg_inference_time /= len(self.train_loader)
-            with torch.no_grad():
-                for batch_x,batch_y in tqdm(self.val_loader):
+        if not self.graph:
+            for epoch in range(self.epoch):
+                epoch_start = time.time()
+                self.avg_train_loss = 0.0
+                self.avg_val_loss = 0.0
+                for batch_x,batch_y in tqdm(self.train_loader):
                     batch_x, batch_y = batch_x.float().to(self.device), batch_y.float().to(self.device)
+                    inf_start = time.time()
                     output = self.model(batch_x)
+                    inf_end = time.time()
+                    self.avg_inference_time += inf_end-inf_start
                     loss = self.loss_fn(output,batch_y)
-                    self.avg_val_loss += loss.item()
-                self.avg_val_loss /= len(self.val_loader)
-                self.val_loss.append(self.avg_val_loss) 
-                if self.avg_val_loss < self.best_val_loss:
-                    self.best_val_loss = self.avg_val_loss
-                    self.best_epoch = epoch
-                    self.best_path = f'../checkpoints/{self.model_name}_bs{self.batch_size}_lr{self.learning_rate}_win{self.seq_len}-{self.target_len}-{self.pred_len}_v{self.velocity}_sc{self.scale}_ep{epoch}.pth'
-            epoch_end = time.time()
-            epoch_time = epoch_end-epoch_start
-            self.save(epoch,self.model,self.avg_val_loss)
-            self.avg_time_per_epoch += epoch_time/self.epoch
-            print(f'===Epoch: {epoch} | Training Loss: {self.avg_train_loss} | Validation Loss: {self.avg_val_loss} | Avg inference time: {self.avg_inference_time} | Time per epoch: {epoch_time}')
-            
+                    self.avg_train_loss +=loss.item()
+                    loss.backward()
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+                self.avg_train_loss /= len(self.train_loader)
+                self.training_loss.append(self.avg_train_loss )
+                self.avg_inference_time /= len(self.train_loader)
+                with torch.no_grad():
+                    for batch_x,batch_y in tqdm(self.val_loader):
+                        batch_x, batch_y = batch_x.float().to(self.device), batch_y.float().to(self.device)
+                        output = self.model(batch_x)
+                        loss = self.loss_fn(output,batch_y)
+                        self.avg_val_loss += loss.item()
+                    self.avg_val_loss /= len(self.val_loader)
+                    self.val_loss.append(self.avg_val_loss) 
+                    if self.avg_val_loss < self.best_val_loss:
+                        self.best_val_loss = self.avg_val_loss
+                        self.best_epoch = epoch
+                        self.best_path = f'../checkpoints/{self.model_name}_bs{self.batch_size}_lr{self.learning_rate}_win{self.seq_len}-{self.target_len}-{self.pred_len}_v{self.velocity}_sc{self.scale}_ep{epoch}.pth'
+                epoch_end = time.time()
+                epoch_time = epoch_end-epoch_start
+                self.save(epoch,self.model,self.avg_val_loss)
+                self.avg_time_per_epoch += epoch_time/self.epoch
+                print(f'===Epoch: {epoch} | Training Loss: {self.avg_train_loss} | Validation Loss: {self.avg_val_loss} | Avg inference time: {self.avg_inference_time} | Time per epoch: {epoch_time}')
+        else:
+            for epoch in range(self.epoch):
+                epoch_start = time.time()
+                self.avg_train_loss = 0.0
+                self.avg_val_loss = 0.0
+                for batch in tqdm(self.train_loader):
+                    batch_y = torch.reshape(batch.y.float(),(self.batch_size,self.seq_len,self.num_features))
+                    inf_start = time.time()
+                    output = self.model(batch)
+                    inf_end = time.time()
+                    self.avg_inference_time += inf_end-inf_start
+                    loss = self.loss_fn(output,batch_y)
+                    self.avg_train_loss +=loss.item()
+                    loss.backward()
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+                self.avg_train_loss /= len(self.train_loader)
+                self.training_loss.append(self.avg_train_loss )
+                self.avg_inference_time /= len(self.train_loader)
+                with torch.no_grad():
+                    for batch in tqdm(self.val_loader):
+                        batch_y = torch.reshape(batch.y.float(),(self.batch_size,self.seq_len,self.num_features))
+                        output = self.model(batch)
+                        loss = self.loss_fn(output,batch_y)
+                        self.avg_val_loss += loss.item()
+                    self.avg_val_loss /= len(self.val_loader)
+                    self.val_loss.append(self.avg_val_loss) 
+                    if self.avg_val_loss < self.best_val_loss:
+                        self.best_val_loss = self.avg_val_loss
+                        self.best_epoch = epoch
+                        self.best_path = f'../checkpoints/{self.model_name}_bs{self.batch_size}_lr{self.learning_rate}_win{self.seq_len}-{self.target_len}-{self.pred_len}_v{self.velocity}_sc{self.scale}_ep{epoch}.pth'
+                epoch_end = time.time()
+                epoch_time = epoch_end-epoch_start
+                self.save(epoch,self.model,self.avg_val_loss)
+                self.avg_time_per_epoch += epoch_time/self.epoch
+                print(f'===Epoch: {epoch} | Training Loss: {self.avg_train_loss} | Validation Loss: {self.avg_val_loss} | Avg inference time: {self.avg_inference_time} | Time per epoch: {epoch_time}')
+                
+
         train_end = time.time()
         self.training_time = train_end-train_start
         print("###############TRAINING COMPLETE###############")
@@ -130,6 +175,7 @@ class Protocol():
         print("Final training loss: ",self.avg_train_loss)
         print("Final validation loss: ",self.avg_val_loss)
         print("Best validation loss: ",self.best_val_loss)
+        rpint("Best epoch: ",self.best_epoch)
         print("Avg training inference time: ",self.avg_inference_time)
         print("Total training time: ",self.training_time)
         print(f"Model size: {self.find_model_size(self.model)} MB")
@@ -149,13 +195,23 @@ class Protocol():
         return size_all_mb
 
     def eval(self):
-        with torch.no_grad():
-            for batch_x,batch_y in self.test_loader:
-                output = self.model(batch_x.float().to(self.device))
-                loss = self.loss_fn(output,batch_y.float().to(self.device))
-                self.avg_test_loss+=loss.item()
-            self.avg_test_loss /= len(self.test_loader)
-        print("Test Loss: ",self.avg_test_loss)
+        if not self.graph:
+            with torch.no_grad():
+                for batch_x,batch_y in self.test_loader:
+                    output = self.model(batch_x.float().to(self.device))
+                    loss = self.loss_fn(output,batch_y.float().to(self.device))
+                    self.avg_test_loss+=loss.item()
+                self.avg_test_loss /= len(self.test_loader)
+            print("Test Loss: ",self.avg_test_loss)
+        else:
+            with torch.no_grad():
+                for batch in self.test_loader:
+                    batch_y = torch.reshape(batch.y.float(),(self.batch_size,self.seq_len,self.num_features))
+                    output = self.model(batch)
+                    loss = self.loss_fn(output,batch_y.float().to(self.device))
+                    self.avg_test_loss+=loss.item()
+                self.avg_test_loss /= len(self.test_loader)
+            print("Test Loss: ",self.avg_test_loss)
         return 
 
     def save(self,epoch,model,loss):
