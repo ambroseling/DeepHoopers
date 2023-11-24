@@ -68,10 +68,13 @@ class TrackingDataDataset(Dataset):
         self.data = self.data[~mask.any(axis=1)]
         self.data = self.data[::int((25/self.freq))]
         if self.scale:
-
+            print("Largest X: ",np.max(self.data[:,2]))
+            print("Largest Y: ",np.max(self.data[:,3]))
+            print("Largest X: ",np.max(self.data[:,2]))
+            print("Largest Y: ",np.max(self.data[:,3]))
             self.data[:, [2] + [4] +list(range(6, 16)) + list(range(26, 36))] = self.data[:, [2] + [4] +list(range(6, 16)) + list(range(26, 36))] / 100.
             self.data[:, [3] + [5] + list(range(16,26)) + list(range(36, 46))] = self.data[:, [3] + [5] + list(range(16,26)) + list(range(36, 46))] / 50.
-
+        
         self.data_x = self.data[:,[4]+[5]+list(range(26,46))]*1000 if self.velocity else self.data[:,[2]+[3]+list(range(6, 26))]
         self.data_y = self.data[:,[4]+[5]+list(range(26,46))]*1000 if self.velocity else self.data[:,[2]+[3]+list(range(6, 26))]
         x_coord = self.data_x[:,[0]+list(range(2,12))]
@@ -183,7 +186,5 @@ def data_provider(size = (10,7,3),scale=True,velocity=True,freq = 25 ,graph=Fals
     #                             batch is a vector indicating which node belongs to which graph
     #                             ptr tells us the cummulative number of nodes in the batch up to each graph
     # Each sample is a DataBatch
-
-
     return train_dataloader,val_dataloader,test_dataloader,test_data
 
