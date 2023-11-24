@@ -11,7 +11,7 @@ from models.baseline import MLP
 def main():
     # print(torch.backends.mps.is_available())
     # print(torch.backends.mps.is_built())
-    epoch = 20
+    epoch = 30
     learning_rate = 0.01
     batch_size = 32
     num_features = 22
@@ -20,7 +20,7 @@ def main():
     pred_len = 25
     scale = True
     velocity = False
-    graph = True
+    graph = False
     freq = 5
 
     input_size = 22
@@ -29,26 +29,26 @@ def main():
     output_size = 22
     fc_units_bi = [128,64,22]
     fc_units = [64,32,22]
-    device = torch.device("cuda" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
     # lstm = LSTM(input_size, hidden_size, fc_units, output_size, num_layers,device)
     # bilstm = BiLSTM(input_size, hidden_size, fc_units_bi, output_size, num_layers,device)
     # grued = GRUEncoderDecoder(num_layers, input_size, hidden_size, fc_units, output_size,device)
-    # mlp = MLP(num_features,device)
+    
 
 
     batch_size = 32
     seq_len = 50
-    lstm_layers = 3
-    gat_layers = 5
-    input_heads = 4
-    output_size = 22
-    hidden_size = [64,128]
-    fc_units = [64,32,22]
-    activation = "elu"
-    device = "cpu"
-    aggr = "mean"
-    gat = "gcn"
+    # lstm_layers = 3
+    # gat_layers = 5
+    # input_heads = 4
+    # output_size = 22
+    # hidden_size = [64,128]
+    # fc_units = [64,32,22]
+    # activation = "elu"
+    # device = "cpu"
+    # aggr = "mean"
+    # gat = "gcn"
 
     # gcnlstm = GNNLSTM(batch_size=32,seq_len = 50,lstm_layers = 3,gat_layers=5, input_heads=4,output_size=22, hidden_size=[128,256],fc_units = [512,64,32,22], activation = "elu",device="cpu",aggr = "mean",gnn="gcn")
     # gcnlstm_protocol = Protocol(gcnlstm, epoch, learning_rate, batch_size, num_features, seq_len, pred_len, target_len, scale, velocity, graph, freq,device)
@@ -112,11 +112,25 @@ def main():
 
     # grued_protocol.train()
     # grued_protocol.eval()
+    #mlp = MLP(num_features,device)
 
-    # mlp_protocol = Protocol(mlp, epoch, learning_rate, batch_size, num_features, seq_len, pred_len, target_len, scale, velocity, freq,graph,device)
-    # mlp_protocol.load_data()
-    # # mlp_protocol.train()
-    # mlp_protocol.eval()
+
+    # lstm = LSTM(input_size, 512, [512,64,22], output_size, num_layers,device)
+    # checkpoint = torch.load("/Users/ambroseling/Desktop/DeepHoopers/DeepHoopers/checkpoints/LSTM_bs32_lr0.003_win50-25-25_vFalse_scTrue_ep22.pth",map_location="cpu")
+    # print(checkpoint.keys())
+    # lstm.load_state_dict(checkpoint['model_state_dict'],strict=False)
+
+    bilstm = BiLSTM(22, 512, [1024,256,64,22], 22, 3,device)
+    checkpoint = torch.load("/Users/ambroseling/Desktop/DeepHoopers/DeepHoopers/checkpoints/BiLSTM_bs32_lr0.001_win50-25-25_vFalse_scTrue_ep21.pth",map_location="cpu")
+    print(checkpoint.keys())
+    bilstm.load_state_dict(checkpoint['model_state_dict'],strict=False)
+    lstm_protocol = Protocol(bilstm, epoch, learning_rate, batch_size, num_features, seq_len, pred_len, target_len, scale, velocity, freq,graph,device)
+    lstm_protocol.load_data()
+    lstm_protocol.plot_test_data()
+    lstm_protocol.plot_test_data()
+    lstm_protocol.plot_test_data()
+
+    
 
     return
 

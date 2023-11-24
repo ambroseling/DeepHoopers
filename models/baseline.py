@@ -11,8 +11,10 @@ class MLP(nn.Module):
     self.layer2 = nn.Linear(32, 64,device=device)
     self.layer3 = nn.Linear(64, 128,device=device)
     self.layer4 = nn.Linear(128, 512,device=device)
-    self.layer5 = nn.Linear(512, 64,device=device)
-    self.layer6 = nn.Linear(64, num_features,device=device)
+    self.layer5 = nn.Linear(512, 1024,device=device)
+    self.layer6 = nn.Linear(1024, 512,device=device)
+    self.layer7 = nn.Linear(512, 64,device=device)
+    self.layer8 = nn.Linear(64, num_features,device=device)
     self.relu = nn.ReLU()
 
   def forward(self, x):
@@ -27,4 +29,8 @@ class MLP(nn.Module):
     x = self.layer5(x)
     x = self.relu(x)
     x = self.layer6(x)
+    x = self.relu(x)
+    x = self.layer7(x)
+    x = self.relu(x)
+    x = self.layer8(x)
     return x
